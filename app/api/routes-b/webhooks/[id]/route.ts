@@ -1,7 +1,70 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
-import { dispatchWebhookDelivery } from '../../_lib/webhook-delivery'
+import { validateEventTypes } from '../../_lib/webhook-events'
+import { registerRoute } from '../../_lib/openapi'
+import { z } from 'zod'
+
+// Register OpenAPI documentation
+registerRoute({
+  method: 'GET',
+  path: '/webhooks/{id}',
+  summary: 'Get webhook',
+  description: 'Get a specific webhook by ID.',
+  responseSchema: z.object({
+    webhook: z.object({
+      id: z.string(),
+      targetUrl: z.string(),
+      description: z.string().nullable(),
+      subscribedEvents: z.array(z.string()),
+      isActive: z.boolean(),
+      createdAt: z.string()
+    })
+  }),
+  tags: ['webhooks']
+})
+
+registerRoute({
+  method: 'PATCH',
+  path: '/webhooks/{id}',
+  summary: 'Update webhook',
+  description: 'Update webhook properties including event types.',
+  requestSchema: z.object({
+    targetUrl: z.string().url().optional(),
+    description: z.string().max(100).optional(),
+    eventTypes: z.array(z.string()).optional(),
+    isActive: z.boolean().optional()
+  }),
+  responseSchema: z.object({
+    webhook: z.object({
+      id: z.string(),
+      targetUrl: z.string(),
+      description: z.string().nullable(),
+      subscribedEvents: z.array(z.string()),
+      isActive: z.boolean(),
+      createdAt: z.string(),
+      updatedAt: z.string()
+    })
+  }),
+  tags: ['webhooks']
+})
+
+registerRoute({
+  method: 'DELETE',
+  path: '/webhooks/{id}',
+  summary: 'Delete webhook',
+  description: 'Delete a webhook by ID.',
+  tags: ['webhooks']
+})
+
+function isValidHttpsUrl(url: string) {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 export async function GET(
   request: NextRequest,
@@ -27,6 +90,8 @@ export async function GET(
       userId: true,
       targetUrl: true,
       description: true,
+      subscribedEvents: true,
+      isActive: true,
       createdAt: true,
     },
   })
@@ -44,8 +109,8 @@ export async function GET(
       id: webhook.id,
       targetUrl: webhook.targetUrl,
       description: webhook.description,
-      isActive: webhook.isActive ?? true,
-      subscribedEvents: webhook.subscribedEvents ?? [],
+      subscribedEvents: webhook.subscribedEvents,
+      isActive: webhook.isActive,
       createdAt: webhook.createdAt,
     },
   })
@@ -78,39 +143,50 @@ export async function PATCH(
   }
 
   const body = await request.json()
-  const updateData: {
-    targetUrl?: string
-    description?: string | null
-    isActive?: boolean
-    subscribedEvents?: string[]
-  } = {}
+  const { targetUrl, description, eventTypes, isActive } = body
 
-  if (body.targetUrl !== undefined) {
-    if (typeof body.targetUrl !== 'string') {
-      return NextResponse.json({ error: 'targetUrl must be a string' }, { status: 400 })
+  const updateData: any = {}
+
+  if (targetUrl !== undefined) {
+    if (typeof targetUrl !== 'string' || targetUrl.length > 512 || !isValidHttpsUrl(targetUrl)) {
+      return NextResponse.json(
+        { error: 'targetUrl must be a valid https:// URL (max 512 chars)' },
+        { status: 400 }
+      )
     }
-    updateData.targetUrl = body.targetUrl
+    updateData.targetUrl = targetUrl
   }
 
-  if (body.description !== undefined) {
-    if (body.description !== null && typeof body.description !== 'string') {
-      return NextResponse.json({ error: 'description must be a string or null' }, { status: 400 })
+  if (description !== undefined) {
+    if (description !== null && (typeof description !== 'string' || description.length > 100)) {
+      return NextResponse.json(
+        { error: 'description must be a string of at most 100 characters or null' },
+        { status: 400 }
+      )
     }
-    updateData.description = body.description
+    updateData.description = description
   }
 
-  if (body.isActive !== undefined) {
-    if (typeof body.isActive !== 'boolean') {
+  if (eventTypes !== undefined) {
+    try {
+      updateData.subscribedEvents = validateEventTypes(eventTypes)
+    } catch (error) {
+      return NextResponse.json(
+        { error: error instanceof Error ? error.message : 'Invalid eventTypes' },
+        { status: 400 }
+      )
+    }
+  }
+
+  if (isActive !== undefined) {
+    if (typeof isActive !== 'boolean') {
       return NextResponse.json({ error: 'isActive must be a boolean' }, { status: 400 })
     }
-    updateData.isActive = body.isActive
+    updateData.isActive = isActive
   }
 
-  if (body.subscribedEvents !== undefined) {
-    if (!Array.isArray(body.subscribedEvents) || body.subscribedEvents.some((value: unknown) => typeof value !== 'string')) {
-      return NextResponse.json({ error: 'subscribedEvents must be an array of strings' }, { status: 400 })
-    }
-    updateData.subscribedEvents = body.subscribedEvents
+  if (Object.keys(updateData).length === 0) {
+    return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
   }
 
   const updatedWebhook = await prisma.userWebhook.update({
@@ -120,60 +196,16 @@ export async function PATCH(
       id: true,
       targetUrl: true,
       description: true,
-      isActive: true,
       subscribedEvents: true,
-      createdAt: true,
-    },
-  })
-
-  return NextResponse.json({ webhook: updatedWebhook })
-}
-
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  const { id } = await params
-
-  const authToken = request.headers.get('authorization')?.replace('Bearer ', '')
-  const claims = await verifyAuthToken(authToken || '')
-  if (!claims) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  const user = await prisma.user.findUnique({ where: { privyId: claims.userId } })
-  if (!user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 })
-  }
-
-  const webhook = await prisma.userWebhook.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      userId: true,
-      targetUrl: true,
-      signingSecret: true,
       isActive: true,
+      createdAt: true,
+      updatedAt: true,
     },
   })
-  if (!webhook) {
-    return NextResponse.json({ error: 'Webhook not found' }, { status: 404 })
-  }
-  if (webhook.userId !== user.id) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
-  if (!webhook.isActive) {
-    return NextResponse.json({ error: 'Webhook is inactive' }, { status: 422 })
-  }
 
-  const body = await request.json()
-  const eventType = typeof body?.eventType === 'string' && body.eventType.trim().length > 0
-    ? body.eventType.trim()
-    : 'webhook.event'
-  const payload = body?.payload && typeof body.payload === 'object' ? body.payload : {}
-
-  const outcome = await dispatchWebhookDelivery(webhook, eventType, payload as Record<string, unknown>)
-  return NextResponse.json({ outcome })
+  return NextResponse.json({
+    webhook: updatedWebhook,
+  })
 }
 
 export async function DELETE(

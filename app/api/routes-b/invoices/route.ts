@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
 import { generateInvoiceNumber } from '@/lib/utils'
+import { findRecentDuplicateInvoice } from '../_lib/duplicate-detection'
 
 async function getAuthenticatedUser(request: NextRequest) {
   const authToken = request.headers.get('authorization')?.replace('Bearer ', '')
@@ -112,6 +113,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'amount must be greater than 0' }, { status: 400 })
   }
 
+  const { searchParams } = new URL(request.url)
+  const forceCreate = searchParams.get('force') === 'true'
+  const normalizedClientEmail = String(clientEmail).toLowerCase()
+  const normalizedCurrency = String(currency).toUpperCase()
+
+  if (!forceCreate) {
+    const duplicateInvoiceId = await findRecentDuplicateInvoice({
+      userId: auth.user.id,
+      clientEmail: normalizedClientEmail,
+      amount: parsedAmount,
+      currency: normalizedCurrency,
+    })
+
+    if (duplicateInvoiceId) {
+      return NextResponse.json({ duplicateOfId: duplicateInvoiceId }, { status: 409 })
+    }
+  }
+
   let parsedDueDate: Date | null = null
   if (dueDate) {
     parsedDueDate = new Date(dueDate)
@@ -128,11 +147,11 @@ export async function POST(request: NextRequest) {
     data: {
       userId: auth.user.id,
       invoiceNumber,
-      clientEmail: String(clientEmail).toLowerCase(),
+      clientEmail: normalizedClientEmail,
       clientName: clientName || null,
       description,
       amount: parsedAmount,
-      currency,
+      currency: normalizedCurrency,
       paymentLink,
       dueDate: parsedDueDate,
     },

@@ -5,18 +5,36 @@ import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
 import { logger } from '@/lib/logger'
 import { buildDashboardSummary } from '../_lib/aggregations'
+import { errorResponse } from '../_lib/errors'
 import { normalizeCurrencyAmount } from '../_lib/amounts'
 
 async function GETHandler(request: NextRequest) {
-  const authToken = request.headers.get('authorization')?.replace('Bearer ', '')
+  const requestId = request.headers.get('x-request-id')
+  const authToken = request.headers
+    .get('authorization')
+    ?.replace('Bearer ', '')
   const claims = await verifyAuthToken(authToken || '')
   if (!claims) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    return errorResponse(
+      'UNAUTHORIZED',
+      'Unauthorized',
+      undefined,
+      401,
+      requestId,
+    )
   }
 
-  const user = await prisma.user.findUnique({ where: { privyId: claims.userId } })
+  const user = await prisma.user.findUnique({
+    where: { privyId: claims.userId },
+  })
   if (!user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    return errorResponse(
+      'NOT_FOUND',
+      'User not found',
+      undefined,
+      404,
+      requestId,
+    )
   }
 
   const now = new Date()
@@ -39,7 +57,10 @@ async function GETHandler(request: NextRequest) {
     `),
   ])
 
-  logger.info({ userId: user.id, queryCount: dashboard.queryCount + 1 }, 'routes-b dashboard query profile')
+  logger.info(
+    { userId: user.id, queryCount: dashboard.queryCount + 1 },
+    'routes-b dashboard query profile',
+  )
 
   const sparklineByDate = new Map(
     sparklineRows.map(row => [

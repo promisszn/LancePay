@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
 import { logger } from '@/lib/logger'
-import { parseUtcDateRange } from '../../_lib/date-range'
+import { parseTzDateRange } from '../../_lib/date-range'
 
 async function GETHandler(request: NextRequest) {
   try {
@@ -19,6 +19,7 @@ async function GETHandler(request: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { privyId: claims.userId },
+      select: { id: true, timezone: true },
     })
 
     if (!user) {
@@ -26,12 +27,12 @@ async function GETHandler(request: NextRequest) {
     }
 
     const url = new URL(request.url)
-    const parsedRange = parseUtcDateRange(url.searchParams)
+    const parsedRange = parseTzDateRange(url.searchParams, user.timezone)
     if (!parsedRange.ok) {
       return NextResponse.json(parsedRange.error, { status: 400 })
     }
 
-    const { from, to, toExclusive, days } = parsedRange.value
+    const { from, to, toExclusive, days, tz } = parsedRange.value
     const where = {
       userId: user.id,
       type: 'payment',
@@ -51,9 +52,10 @@ async function GETHandler(request: NextRequest) {
       earnings: {
         totalEarned: Number(total._sum.amount ?? 0),
         currency: 'USDC',
-        from: from.toISOString().slice(0, 10),
-        to: to.toISOString().slice(0, 10),
+        from: from.toLocaleDateString('en-CA', { timeZone: tz }),
+        to: to.toLocaleDateString('en-CA', { timeZone: tz }),
         days,
+        tz,
       },
     })
   } catch (error) {

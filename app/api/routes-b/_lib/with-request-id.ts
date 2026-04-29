@@ -56,6 +56,7 @@ function patchLogger() {
   for (const method of ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const) {
     const original = target[method]
     if (typeof original !== 'function') continue
+    if (original.mock || original._isMockFunction) continue
 
     target[method] = function requestIdLoggerMethod(this: unknown, ...args: any[]) {
       const requestId = getRequestId()

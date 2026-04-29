@@ -1,9 +1,10 @@
+import { withRequestId } from '../../_lib/with-request-id'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { Invoice } from '@prisma/client'
 import { verifyAuthToken } from '@/lib/auth'
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   // 1. Verify auth
   const authToken = request.headers.get('authorization')?.replace('Bearer ', '')
   const claims = await verifyAuthToken(authToken || '')
@@ -56,3 +57,5 @@ export async function GET(request: NextRequest) {
     total: invoices.length,
   })
 }
+
+export const GET = withRequestId(GETHandler)

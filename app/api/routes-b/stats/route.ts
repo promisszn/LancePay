@@ -1,3 +1,4 @@
+import { withRequestId } from '../_lib/with-request-id'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireScope, RoutesBForbiddenError } from '../_lib/authz'
@@ -25,7 +26,7 @@ registerRoute({
   tags: ['stats']
 })
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const auth = await requireScope(request, 'routes-b:read')
     const cacheKey = `routes-b:stats:${auth.userId}`
@@ -81,3 +82,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 }
+
+export const GET = withRequestId(GETHandler)

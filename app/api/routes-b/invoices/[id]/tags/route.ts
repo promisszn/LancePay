@@ -1,10 +1,11 @@
+import { withRequestId } from '../../../_lib/with-request-id'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
 import { logger } from '@/lib/logger'
 
 // ── GET /api/routes-b/invoices/[id]/tags — get all tags for an invoice ──
-export async function GET(
+async function GETHandler(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -50,7 +51,7 @@ export async function GET(
 }
 
 // ── POST /api/routes-b/invoices/[id]/tags — apply a tag to an invoice ──
-export async function POST(
+async function POSTHandler(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
@@ -115,3 +116,6 @@ export async function POST(
         return NextResponse.json({ error: 'Failed to apply tag' }, { status: 500 })
     }
 }
+
+export const GET = withRequestId(GETHandler)
+export const POST = withRequestId(POSTHandler)

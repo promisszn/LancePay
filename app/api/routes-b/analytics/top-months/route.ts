@@ -1,3 +1,4 @@
+import { withRequestId } from '../../_lib/with-request-id'
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
@@ -6,7 +7,7 @@ import { verifyAuthToken } from '@/lib/auth'
  * GET /api/routes-b/analytics/top-months
  * Returns the three calendar months with the highest paid invoice totals for the authenticated user.
  */
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   try {
     const authToken = request.headers.get('authorization')?.replace('Bearer ', '')
     const claims = await verifyAuthToken(authToken || '')
@@ -48,3 +49,5 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 })
   }
 }
+
+export const GET = withRequestId(GETHandler)

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
 import { logger } from '@/lib/logger'
 import { buildDashboardSummary } from '../_lib/aggregations'
+import { withCompression } from '../_lib/with-compression'
 
 export async function GET(request: NextRequest) {
   const authToken = request.headers.get('authorization')?.replace('Bearer ', '')
@@ -18,5 +19,5 @@ export async function GET(request: NextRequest) {
 
   const { summary, queryCount } = await buildDashboardSummary(user.id)
   logger.info({ userId: user.id, queryCount }, 'routes-b dashboard query profile')
-  return NextResponse.json({ summary })
+  return withCompression(request, NextResponse.json({ summary }))
 }

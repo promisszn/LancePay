@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireScope, RoutesBForbiddenError } from '../_lib/authz'
 import { registerRoute } from '../_lib/openapi'
 import { getCacheValue, setCacheValue } from '../_lib/cache'
+import { withCompression } from '../_lib/with-compression'
 import { z } from 'zod'
 
 // Register OpenAPI documentation
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
       pendingWithdrawals: number
     }>(cacheKey)
     if (cached) {
-      return NextResponse.json(cached, { headers: { 'X-Cache': 'HIT' } })
+      return withCompression(request, NextResponse.json(cached, { headers: { 'X-Cache': 'HIT' } }))
     }
 
     const user = await prisma.user.findUnique({ where: { id: auth.userId } })
@@ -73,7 +74,7 @@ export async function GET(request: NextRequest) {
     }
 
     setCacheValue(cacheKey, payload, 60_000)
-    return NextResponse.json(payload, { headers: { 'X-Cache': 'MISS' } })
+    return withCompression(request, NextResponse.json(payload, { headers: { 'X-Cache': 'MISS' } }))
   } catch (error) {
     if (error instanceof RoutesBForbiddenError) {
       return NextResponse.json({ error: 'Forbidden', code: error.code }, { status: 403 })

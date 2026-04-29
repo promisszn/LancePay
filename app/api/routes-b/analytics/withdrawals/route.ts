@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
 import { logger } from '@/lib/logger'
 import { parseTzDateRange } from '../../_lib/date-range'
+import { withCompression } from '../../_lib/with-compression'
 
 export async function GET(request: NextRequest) {
   try {
@@ -52,7 +53,7 @@ export async function GET(request: NextRequest) {
       prisma.transaction.count({ where: { ...where, status: 'failed' } }),
     ])
 
-    return NextResponse.json({
+    return withCompression(request, NextResponse.json({
       withdrawals: {
         totalCount: total._count.id,
         totalAmount: Number(total._sum.amount ?? 0),
@@ -63,7 +64,7 @@ export async function GET(request: NextRequest) {
         currency: 'USDC',
         tz,
       },
-    })
+    }))
   } catch (error) {
     logger.error({ err: error }, 'Routes B analytics withdrawals GET error')
     return NextResponse.json({ error: 'Failed to get withdrawal stats' }, { status: 500 })

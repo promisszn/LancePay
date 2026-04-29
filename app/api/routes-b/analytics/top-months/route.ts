@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
 import { isValidTimezone } from '../../_lib/date-range'
+import { withCompression } from '../../_lib/with-compression'
 
 export async function GET(request: NextRequest) {
   try {
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
       .slice(0, 3)
       .map(([month, earned]) => ({ month, earned: Number(earned.toFixed(2)) }))
 
-    return NextResponse.json({ topMonths, tz: rawTz })
+    return withCompression(request, NextResponse.json({ topMonths, tz: rawTz }))
   } catch (error) {
     console.error('Top months analytics error:', error)
     return NextResponse.json({ error: 'Failed to fetch analytics' }, { status: 500 })

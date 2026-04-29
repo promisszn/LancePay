@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { verifyAuthToken } from '@/lib/auth'
+import { withCompression } from '../../_lib/with-compression'
 
 const INVOICE_STATUSES = ['pending', 'paid', 'overdue', 'cancelled'] as const
 type InvoiceStatus = (typeof INVOICE_STATUSES)[number]
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
 
   const total = counts.pending + counts.paid + counts.overdue + counts.cancelled
 
-  return NextResponse.json({
+  return withCompression(request, NextResponse.json({
     invoices: {
       total,
       pending: counts.pending,
@@ -55,5 +56,5 @@ export async function GET(request: NextRequest) {
       cancelled: counts.cancelled,
       totalInvoiced: Number(totals._sum.amount ?? 0),
     },
-  })
+  }))
 }

@@ -1,8 +1,9 @@
+import { withRequestId } from '../../_lib/with-request-id'
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { verifyAuthToken } from "@/lib/auth";
 
-export async function GET(request: NextRequest) {
+async function GETHandler(request: NextRequest) {
   const authToken = request.headers
     .get("authorization")
     ?.replace("Bearer ", "");
@@ -65,3 +66,5 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({ clients });
 }
+
+export const GET = withRequestId(GETHandler)
